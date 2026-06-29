@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { Tetris } from './tetris/Tetris'
+import { Snake } from './snake/Snake'
 
 export type GameStatus = 'playable' | 'wip'
 
@@ -22,6 +23,15 @@ export const GAMES: ReadonlyArray<Game> = [
     accent: 'from-cyan-400 to-fuchsia-500',
     status: 'playable',
     component: Tetris,
+  },
+  {
+    id: 'snake',
+    name: 'Snake',
+    tagline: 'Eat the dots. Don’t eat yourself.',
+    emoji: '🐍',
+    accent: 'from-emerald-400 to-lime-500',
+    status: 'playable',
+    component: Snake,
   },
 ]
 
