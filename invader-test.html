@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Invader Animation — Draft</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #09090b;
+      color: #e4e4e7;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      padding: 32px;
+    }
+    h1 { font-size: 11px; letter-spacing: 0.35em; color: #52525b; text-transform: uppercase; }
+    canvas {
+      display: block;
+      background: #09090b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: center;
+      font-size: 11px;
+      color: #71717a;
+      letter-spacing: 0.05em;
+    }
+    label { display: flex; align-items: center; gap: 10px; }
+    input[type=range] { accent-color: #a855f7; cursor: pointer; }
+    .hint { font-size: 10px; color: #3f3f46; }
+  </style>
+</head>
+<body>
+  <h1>Space Invaders — Invader Animation Draft</h1>
+  <canvas id="c"></canvas>
+  <div class="controls">
+    <label>
+      march speed
+      <input type="range" id="speed" min="60" max="700" value="280" step="20" />
+      <span id="speedVal">280 ms</span>
+    </label>
+    <label>
+      glow
+      <input type="range" id="glow" min="0" max="24" value="8" step="2" />
+      <span id="glowVal">8</span>
+    </label>
+    <label>
+      pixel size
+      <input type="range" id="px" min="2" max="6" value="4" step="1" />
+      <span id="pxVal">4</span>
+    </label>
+  </div>
+  <p class="hint">click an invader to blow it up</p>
+
+  <script>
+    // ─── sprite data ────────────────────────────────────────────────────────
+    // Each frame is an array of strings — 'X' filled, '.' empty.
+    // Row types match the 5 game rows top→bottom.
+
+    const SPRITES = {
+      // top row — classic squid
+      squid: [
+        [
+          '..XXXX..',
+          '.XXXXXX.',
+          'XXXXXXXX',
+          'XX.XX.XX',
+          'XXXXXXXX',
+          '.X.XX.X.',
+          'X......X',
+          '.X....X.',
+        ],
+        [
+          '..XXXX..',
+          '.XXXXXX.',
+          'XXXXXXXX',
+          'XX.XX.XX',
+          'XXXXXXXX',
+          '..X..X..',
+          '.X.XX.X.',
+          'X.X..X.X',
+        ],
+      ],
+
+      // middle rows — crab with reaching claws
+      crab: [
+        [
+          '.X......X.',
+          '..X....X..',
+          '.XXXXXXXX.',
+          'XX.XX.XX.X',
+          'XXXXXXXXXX',
+          '.XXXXXXXX.',
+          'X.X....X.X',
+          '..X....X..',
+        ],
+        [
+          'X........X',
+          '.XX....XX.',
+          '.XXXXXXXX.',
+          'XX.XX.XX.X',
+          'XXXXXXXXXX',
+          '.XXXXXXXX.',
+          '..XX..XX..',
+          '.X......X.',
+        ],
+      ],
+
+      // bottom rows — wide octopus
+      octopus: [
+        [
+          '..XXXXXXXX..',
+          '.XXXXXXXXXX.',
+          'XX.XX.XX.XXX',
+          'XXXXXXXXXXXX',
+          '.XXXXXXXXXX.',
+          '..XXXXXXXX..',
+          '..X..XX..X..',
+          '.X..X..X..X.',
+        ],
+        [
+          '..XXXXXXXX..',
+          '.XXXXXXXXXX.',
+          'XX.XX.XX.XXX',
+          'XXXXXXXXXXXX',
+          '.XXXXXXXXXX.',
+          '..XXXXXXXX..',
+          '.X..X..X..X.',
+          'X..X....X..X',
+        ],
+      ],
+    }
+
+    // row → { spriteKey, color }
+    const ROW_CONFIG = [
+      { key: 'squid',   color: '#e879f9' },  // fuchsia
+      { key: 'crab',    color: '#a78bfa' },  // violet
+      { key: 'crab',    color: '#38bdf8' },  // sky
+      { key: 'octopus', color: '#34d399' },  // emerald
+      { key: 'octopus', color: '#fbbf24' },  // amber
+    ]
+
+    // ─── layout ─────────────────────────────────────────────────────────────
+    const COLS = 11
+    const N_ROWS = 5
+    const MAX_SPRITE_W = 12  // widest sprite (octopus)
+    const SPRITE_H = 8
+
+    let PIXEL = 4
+    let GLOW  = 8
+
+    const GAP_X_PX = () => Math.floor(PIXEL * 3.5)
+    const GAP_Y_PX = () => PIXEL * 4
+    const CELL_W   = () => MAX_SPRITE_W * PIXEL + GAP_X_PX()
+    const CELL_H   = () => SPRITE_H     * PIXEL + GAP_Y_PX()
+    const PAD      = () => PIXEL * 8
+
+    const canvas = document.getElementById('c')
+    const ctx    = canvas.getContext('2d')
+
+    function resize() {
+      canvas.width  = COLS   * CELL_W() + PAD() * 2
+      canvas.height = N_ROWS * CELL_H() + PAD() * 2
+    }
+
+    // ─── particles ──────────────────────────────────────────────────────────
+    const particles = []
+
+    function burst(cx, cy, color) {
+      for (let i = 0; i < 18; i++) {
+        const angle = (i / 18) * Math.PI * 2 + Math.random() * 0.4
+        const speed = 1.5 + Math.random() * 3
+        particles.push({
+          x: cx, y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          decay: 0.025 + Math.random() * 0.025,
+          size: PIXEL * (0.5 + Math.random()),
+          color,
+        })
+      }
+    }
+
+    // ─── invader state ───────────────────────────────────────────────────────
+    const invaders = []
+
+    function buildInvaders() {
+      invaders.length = 0
+      for (let r = 0; r < N_ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          invaders.push({ row: r, col: c, alive: true })
+        }
+      }
+    }
+
+    function invaderRect(r, c) {
+      const cfg = ROW_CONFIG[r]
+      const sp  = SPRITES[cfg.key]
+      const sw  = sp[0][0].length
+      const x   = PAD() + marchX + c * CELL_W() + Math.floor((MAX_SPRITE_W - sw) / 2) * PIXEL
+      const y   = PAD() + r * CELL_H()
+      return { x, y, w: sw * PIXEL, h: SPRITE_H * PIXEL }
+    }
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect()
+      const mx = (e.clientX - rect.left) * (canvas.width / rect.width)
+      const my = (e.clientY - rect.top)  * (canvas.height / rect.height)
+
+      for (const inv of invaders) {
+        if (!inv.alive) continue
+        const { x, y, w, h } = invaderRect(inv.row, inv.col)
+        if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
+          inv.alive = false
+          const color = ROW_CONFIG[inv.row].color
+          burst(x + w / 2, y + h / 2, color)
+          break
+        }
+      }
+    })
+
+    // ─── animation state ────────────────────────────────────────────────────
+    let animFrame   = 0
+    let marchX      = 0
+    let marchDir    = 1
+    const MARCH_PX  = () => PIXEL * 2
+    const MARCH_MAX = () => PIXEL * 32
+    let lastStep    = 0
+    let marchMs     = 280
+
+    // ─── controls ───────────────────────────────────────────────────────────
+    const speedSlider = document.getElementById('speed')
+    const glowSlider  = document.getElementById('glow')
+    const pxSlider    = document.getElementById('px')
+
+    speedSlider.addEventListener('input', () => {
+      marchMs = Number(speedSlider.value)
+      document.getElementById('speedVal').textContent = `${marchMs} ms`
+    })
+    glowSlider.addEventListener('input', () => {
+      GLOW = Number(glowSlider.value)
+      document.getElementById('glowVal').textContent = `${GLOW}`
+    })
+    pxSlider.addEventListener('input', () => {
+      PIXEL = Number(pxSlider.value)
+      document.getElementById('pxVal').textContent = `${PIXEL}`
+      resize()
+    })
+
+    // ─── draw ────────────────────────────────────────────────────────────────
+    function drawSprite(key, frame, x, y, color) {
+      const rows = SPRITES[key][frame]
+      const w    = rows[0].length
+      ctx.fillStyle   = color
+      ctx.shadowColor = color
+      ctx.shadowBlur  = GLOW
+      for (let r = 0; r < rows.length; r++) {
+        for (let c = 0; c < w; c++) {
+          if (rows[r][c] === 'X') {
+            ctx.fillRect(x + c * PIXEL, y + r * PIXEL, PIXEL, PIXEL)
+          }
+        }
+      }
+      ctx.shadowBlur = 0
+    }
+
+    function draw(now) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      // invaders
+      for (const inv of invaders) {
+        if (!inv.alive) continue
+        const cfg = ROW_CONFIG[inv.row]
+        const sp  = SPRITES[cfg.key]
+        const sw  = sp[0][0].length
+        const x   = PAD() + marchX + inv.col * CELL_W() + Math.floor((MAX_SPRITE_W - sw) / 2) * PIXEL
+        const y   = PAD() + inv.row * CELL_H()
+        drawSprite(cfg.key, animFrame, x, y, cfg.color)
+      }
+
+      // particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]
+        p.x += p.vx
+        p.y += p.vy
+        p.vy += 0.12
+        p.life -= p.decay
+        if (p.life <= 0) { particles.splice(i, 1); continue }
+        ctx.globalAlpha = p.life
+        ctx.fillStyle   = p.color
+        ctx.shadowColor = p.color
+        ctx.shadowBlur  = 6
+        ctx.fillRect(p.x, p.y, p.size, p.size)
+        ctx.shadowBlur  = 0
+        ctx.globalAlpha = 1
+      }
+    }
+
+    // ─── loop ────────────────────────────────────────────────────────────────
+    function loop(now) {
+      if (now - lastStep >= marchMs) {
+        animFrame = animFrame === 0 ? 1 : 0
+        marchX += marchDir * MARCH_PX()
+        if (marchX >= MARCH_MAX()) marchDir = -1
+        if (marchX <= -MARCH_MAX()) marchDir = 1
+        lastStep = now
+      }
+      draw(now)
+      requestAnimationFrame(loop)
+    }
+
+    resize()
+    buildInvaders()
+    requestAnimationFrame(loop)
+  </script>
+</body>
+</html>
+```

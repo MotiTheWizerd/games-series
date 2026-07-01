@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import { Tetris } from './tetris/Tetris'
 import { Snake } from './snake/Snake'
+import { SpaceInvaders } from './space-invaders/SpaceInvaders'
 
 export type GameStatus = 'playable' | 'wip'
 
@@ -27,11 +28,20 @@ export const GAMES: ReadonlyArray<Game> = [
   {
     id: 'snake',
     name: 'Snake',
-    tagline: 'Eat the dots. Don’t eat yourself.',
+    tagline: "Eat the dots. Don't eat yourself.",
     emoji: '🐍',
     accent: 'from-emerald-400 to-lime-500',
     status: 'playable',
     component: Snake,
+  },
+  {
+    id: 'space-invaders',
+    name: 'Space Invaders',
+    tagline: 'Shoot them before they reach you.',
+    emoji: '👾',
+    accent: 'from-fuchsia-400 to-violet-500',
+    status: 'playable',
+    component: SpaceInvaders,
   },
 ]
 

@@ -1,7 +1,7 @@
 {
   "project": "games-series",
-  "session_count": 1,
+  "session_count": 3,
   "first_session_started": "2026-06-29",
-  "last_session": "2026-06-29",
-  "notes": "Session 1 — fresh project, nothing in the directory yet. Goal TBD."
+  "last_session": "2026-07-01",
+  "notes": "Session 3 opened 2026-07-01. Fleet: Tetris (playable, committed), Snake (playable, committed), Space Invaders MVP (playable, UNCOMMITTED). Space Invaders roadmap parked in notebook — Moti's favorite, planned across multiple sessions."
 }
