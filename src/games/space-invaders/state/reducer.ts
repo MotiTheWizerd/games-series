@@ -18,10 +18,17 @@ import {
   PLAYER_Y,
   type GameState,
 } from '../types'
+import {
+  anyInvaderInShieldZone,
+  createShields,
+  resolveShieldHits,
+  stompShields,
+  type Shield,
+} from '../shields'
 import { writeBest } from './bestScore'
 import type { GameEvent } from './events'
 
-export type State = GameState & { events: GameEvent[] }
+export type State = GameState & { events: GameEvent[]; shields: Shield[] }
 
 export type Keys = { left: boolean; right: boolean; shoot: boolean }
 
@@ -48,6 +55,7 @@ export function initialState(best: number): State {
     enemyShootCooldown: enemyShootRate(aliveCount),
     animFrame: 0,
     events: [],
+    shields: createShields(),
   }
 }
 
@@ -70,6 +78,7 @@ function tick(state: State, keys: Keys): State {
     playerShootCooldown,
     enemyShootCooldown,
     animFrame,
+    shields,
   } = state
   const events: GameEvent[] = []
 
@@ -108,7 +117,16 @@ function tick(state: State, keys: Keys): State {
     invaderTickLeft = invaderMoveRate(invaders.filter((i) => i.alive).length)
     animFrame = animFrame === 0 ? 1 : 0
     events.push({ type: 'march-step' })
+    if (anyInvaderInShieldZone(invaders)) {
+      shields = stompShields(invaders, shields)
+    }
   }
+
+  // shields absorb bullets from both sides
+  const shieldHits = resolveShieldHits(bullets, shields)
+  bullets = shieldHits.bullets
+  shields = shieldHits.shields
+  for (let i = 0; i < shieldHits.hits; i++) events.push({ type: 'shield-hit' })
 
   // player bullets vs invaders
   const playerHits = resolvePlayerBullets(bullets, invaders)
@@ -143,6 +161,7 @@ function tick(state: State, keys: Keys): State {
     playerShootCooldown,
     enemyShootCooldown,
     animFrame,
+    shields,
     events,
   }
 

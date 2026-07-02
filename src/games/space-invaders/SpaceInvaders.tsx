@@ -18,6 +18,37 @@ import {
   SPRITES,
   SPRITE_PIXEL,
 } from './sprites'
+import {
+  SHIELD_CELLS_H,
+  SHIELD_CELLS_W,
+  SHIELD_COLOR,
+  SHIELD_H,
+  SHIELD_PIXEL,
+  SHIELD_W,
+} from './shields'
+
+const ShieldSprite = memo(function ShieldSprite({ cells }: { cells: boolean[][] }) {
+  const pixels: React.ReactNode[] = []
+  for (let r = 0; r < SHIELD_CELLS_H; r++) {
+    for (let c = 0; c < SHIELD_CELLS_W; c++) {
+      if (!cells[r][c]) continue
+      pixels.push(
+        <span
+          key={`${r}:${c}`}
+          className="absolute"
+          style={{
+            left: c * SHIELD_PIXEL,
+            top: r * SHIELD_PIXEL,
+            width: SHIELD_PIXEL,
+            height: SHIELD_PIXEL,
+            background: SHIELD_COLOR,
+          }}
+        />,
+      )
+    }
+  }
+  return <>{pixels}</>
+})
 
 const InvaderSprite = memo(function InvaderSprite({
   row,
@@ -83,6 +114,22 @@ export function SpaceInvaders() {
             </div>
           ) : null,
         )}
+
+        {state.shields.map((s, i) => (
+          <div
+            key={i}
+            className="absolute"
+            style={{
+              left: s.x,
+              top: s.y,
+              width: SHIELD_W,
+              height: SHIELD_H,
+              filter: `drop-shadow(0 0 3px ${SHIELD_COLOR})`,
+            }}
+          >
+            <ShieldSprite cells={s.cells} />
+          </div>
+        ))}
 
         {state.bullets.map((b) => (
           <div
