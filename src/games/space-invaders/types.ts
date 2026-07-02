@@ -44,6 +44,8 @@ export type InvaderDir = 1 | -1
 
 export type GameStatus = 'playing' | 'paused' | 'gameover' | 'victory'
 
+export type AnimFrame = 0 | 1
+
 export type GameState = {
   playerX: number
   invaders: Invader[]
@@ -57,4 +59,5 @@ export type GameState = {
   nextId: number
   playerShootCooldown: number
   enemyShootCooldown: number
+  animFrame: AnimFrame
 }

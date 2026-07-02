@@ -1,4 +1,5 @@
-import { useSpaceInvaders } from './useSpaceInvaders'
+import { memo } from 'react'
+import { useSpaceInvaders } from './state/useSpaceInvaders'
 import {
   BULLET_H,
   BULLET_W,
@@ -9,14 +10,51 @@ import {
   PLAYER_H,
   PLAYER_W,
   PLAYER_Y,
+  type AnimFrame,
 } from './types'
+import {
+  MAX_SPRITE_W_CELLS,
+  ROW_CONFIG,
+  SPRITES,
+  SPRITE_PIXEL,
+} from './sprites'
 
-function invaderStyle(row: number): string {
-  if (row === 0) return 'bg-fuchsia-400'
-  if (row === 1) return 'bg-violet-400'
-  if (row === 2) return 'bg-sky-400'
-  if (row === 3) return 'bg-emerald-400'
-  return 'bg-amber-400'
+const InvaderSprite = memo(function InvaderSprite({
+  row,
+  frame,
+}: {
+  row: number
+  frame: AnimFrame
+}) {
+  const cfg = ROW_CONFIG[row]
+  const grid = SPRITES[cfg.key][frame]
+  const w = grid[0].length
+  const offsetX = Math.floor((MAX_SPRITE_W_CELLS - w) / 2) * SPRITE_PIXEL
+  const pixels: React.ReactNode[] = []
+  for (let r = 0; r < grid.length; r++) {
+    const rowStr = grid[r]
+    for (let c = 0; c < w; c++) {
+      if (rowStr[c] !== 'X') continue
+      pixels.push(
+        <span
+          key={`${r}:${c}`}
+          className="absolute"
+          style={{
+            left: offsetX + c * SPRITE_PIXEL,
+            top: r * SPRITE_PIXEL,
+            width: SPRITE_PIXEL,
+            height: SPRITE_PIXEL,
+            background: cfg.color,
+          }}
+        />,
+      )
+    }
+  }
+  return <>{pixels}</>
+})
+
+function invaderGlow(row: number): string {
+  return `drop-shadow(0 0 3px ${ROW_CONFIG[row].color})`
 }
 
 export function SpaceInvaders() {
@@ -32,9 +70,17 @@ export function SpaceInvaders() {
           inv.alive ? (
             <div
               key={inv.id}
-              className={`absolute rounded-sm ${invaderStyle(inv.row)}`}
-              style={{ left: inv.x, top: inv.y, width: INV_W, height: INV_H }}
-            />
+              className="absolute"
+              style={{
+                left: inv.x,
+                top: inv.y,
+                width: INV_W,
+                height: INV_H,
+                filter: invaderGlow(inv.row),
+              }}
+            >
+              <InvaderSprite row={inv.row} frame={state.animFrame} />
+            </div>
           ) : null,
         )}
 
