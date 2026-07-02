@@ -14,10 +14,37 @@ import {
 } from './types'
 import {
   MAX_SPRITE_W_CELLS,
+  PLAYER_COLOR,
+  PLAYER_PIXEL,
+  PLAYER_SPRITE,
   ROW_CONFIG,
   SPRITES,
   SPRITE_PIXEL,
 } from './sprites'
+
+const PlayerShip = memo(function PlayerShip() {
+  const pixels: React.ReactNode[] = []
+  for (let r = 0; r < PLAYER_SPRITE.length; r++) {
+    const rowStr = PLAYER_SPRITE[r]
+    for (let c = 0; c < rowStr.length; c++) {
+      if (rowStr[c] !== 'X') continue
+      pixels.push(
+        <span
+          key={`${r}:${c}`}
+          className="absolute"
+          style={{
+            left: c * PLAYER_PIXEL,
+            top: r * PLAYER_PIXEL,
+            width: PLAYER_PIXEL,
+            height: PLAYER_PIXEL,
+            background: PLAYER_COLOR,
+          }}
+        />,
+      )
+    }
+  }
+  return <>{pixels}</>
+})
 import {
   SHIELD_CELLS_H,
   SHIELD_CELLS_W,
@@ -139,10 +166,36 @@ export function SpaceInvaders() {
           />
         ))}
 
-        <div
-          className="absolute bg-cyan-400 rounded-sm"
-          style={{ left: state.playerX, top: PLAYER_Y, width: PLAYER_W, height: PLAYER_H }}
-        />
+        {state.hitPause === 0 && (state.invuln === 0 || Math.floor(state.invuln / 5) % 2 === 0) && (
+          <div
+            className="absolute"
+            style={{
+              left: state.playerX,
+              top: PLAYER_Y,
+              width: PLAYER_W,
+              height: PLAYER_H,
+              filter: `drop-shadow(0 0 3px ${PLAYER_COLOR})`,
+            }}
+          >
+            <PlayerShip />
+          </div>
+        )}
+
+        {state.particles.map((p) => (
+          <div
+            key={p.id}
+            className="absolute"
+            style={{
+              left: p.x,
+              top: p.y,
+              width: p.size,
+              height: p.size,
+              background: PLAYER_COLOR,
+              opacity: p.life,
+              filter: `drop-shadow(0 0 4px ${PLAYER_COLOR})`,
+            }}
+          />
+        ))}
 
         {state.status === 'paused' && (
           <Overlay>

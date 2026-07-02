@@ -83,3 +83,14 @@ export const ROW_CONFIG: readonly RowConfig[] = [
 export const SPRITE_PIXEL = 2
 export const SPRITE_H_CELLS = 8
 export const MAX_SPRITE_W_CELLS = 12
+
+// player cannon — 11×5 cells at 4px = 44×20, exactly PLAYER_W × PLAYER_H
+export const PLAYER_SPRITE: SpriteFrame = [
+  '.....X.....',
+  '....XXX....',
+  '....XXX....',
+  '.XXXXXXXXX.',
+  'XXXXXXXXXXX',
+]
+export const PLAYER_PIXEL = 4
+export const PLAYER_COLOR = '#22d3ee'

@@ -12,6 +12,7 @@ import {
 } from '../engine'
 import {
   PLAY_W,
+  PLAYER_H,
   PLAYER_SHOOT_COOLDOWN,
   PLAYER_SPEED,
   PLAYER_W,
@@ -27,8 +28,18 @@ import {
 } from '../shields'
 import { writeBest } from './bestScore'
 import type { GameEvent } from './events'
+import { burstParticles, stepParticles, type Particle } from './particles'
 
-export type State = GameState & { events: GameEvent[]; shields: Shield[] }
+const HIT_PAUSE_TICKS = 50   // ~0.8s death freeze
+const INVULN_TICKS = 90      // ~1.5s respawn invulnerability
+
+export type State = GameState & {
+  events: GameEvent[]
+  shields: Shield[]
+  hitPause: number
+  invuln: number
+  particles: Particle[]
+}
 
 export type Keys = { left: boolean; right: boolean; shoot: boolean }
 
@@ -56,6 +67,9 @@ export function initialState(best: number): State {
     animFrame: 0,
     events: [],
     shields: createShields(),
+    hitPause: 0,
+    invuln: 0,
+    particles: [],
   }
 }
 
@@ -79,8 +93,25 @@ function tick(state: State, keys: Keys): State {
     enemyShootCooldown,
     animFrame,
     shields,
+    hitPause,
+    invuln,
+    particles,
   } = state
   const events: GameEvent[] = []
+
+  // death pause: the world freezes, only the explosion plays out
+  if (hitPause > 0) {
+    hitPause--
+    particles = stepParticles(particles)
+    if (hitPause === 0) {
+      invuln = INVULN_TICKS
+      bullets = []
+    }
+    return { ...state, hitPause, invuln, bullets, particles, events }
+  }
+
+  invuln = Math.max(0, invuln - 1)
+  particles = stepParticles(particles)
 
   // move player
   if (keys.left) playerX = Math.max(0, playerX - PLAYER_SPEED)
@@ -140,12 +171,18 @@ function tick(state: State, keys: Keys): State {
   invaders = playerHits.invaders
   score += playerHits.scored
 
-  // enemy bullets vs player
-  const enemyHits = resolveEnemyBullets(bullets, playerX)
-  bullets = enemyHits.bullets
-  if (enemyHits.hit) {
-    lives--
-    events.push({ type: 'player-hit' })
+  // enemy bullets vs player (invulnerable right after respawn)
+  if (invuln <= 0) {
+    const enemyHits = resolveEnemyBullets(bullets, playerX)
+    bullets = enemyHits.bullets
+    if (enemyHits.hit) {
+      lives--
+      events.push({ type: 'player-hit' })
+      const burst = burstParticles(playerX + PLAYER_W / 2, PLAYER_Y + PLAYER_H / 2, nextId)
+      nextId += burst.length
+      particles = [...particles, ...burst]
+      if (lives > 0) hitPause = HIT_PAUSE_TICKS
+    }
   }
 
   const next: State = {
@@ -162,6 +199,9 @@ function tick(state: State, keys: Keys): State {
     enemyShootCooldown,
     animFrame,
     shields,
+    hitPause,
+    invuln,
+    particles,
     events,
   }
 
