@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>רעם Shields — Draft</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #09090b;
+      color: #e4e4e7;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 32px;
+    }
+    h1 { font-size: 11px; letter-spacing: 0.35em; color: #52525b; text-transform: uppercase; }
+    canvas {
+      display: block;
+      background: #09090b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      cursor: crosshair;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #71717a;
+      letter-spacing: 0.05em;
+      max-width: 720px;
+    }
+    label { display: flex; align-items: center; gap: 8px; }
+    input[type=range] { accent-color: #fbbf24; cursor: pointer; }
+    input[type=checkbox] { accent-color: #fbbf24; cursor: pointer; }
+    button {
+      background: transparent;
+      border: 1px solid #3f3f46;
+      color: #a1a1aa;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+    }
+    button:hover { border-color: #71717a; color: #e4e4e7; }
+    button.swatch { width: 26px; height: 26px; padding: 0; border-radius: 6px; }
+    .hint { font-size: 10px; color: #3f3f46; }
+  </style>
+</head>
+<body>
+  <h1>Space Invaders — רעם Shields Draft</h1>
+  <canvas id="c"></canvas>
+  <div class="controls">
+    <label>
+      pixel size
+      <input type="range" id="px" min="3" max="8" value="5" step="1" />
+      <span id="pxVal">5</span>
+    </label>
+    <label>
+      blast radius
+      <input type="range" id="blast" min="1" max="4" value="2" step="0.5" />
+      <span id="blastVal">2</span>
+    </label>
+    <label>
+      raggedness
+      <input type="range" id="ragged" min="0" max="100" value="60" step="5" />
+      <span id="raggedVal">60%</span>
+    </label>
+    <label>
+      glow
+      <input type="range" id="glow" min="0" max="24" value="8" step="2" />
+      <span id="glowVal">8</span>
+    </label>
+    <label>
+      rain
+      <input type="checkbox" id="rain" checked />
+    </label>
+    <button class="swatch" id="amber" style="background:#fbbf24" title="thunder amber"></button>
+    <button class="swatch" id="green" style="background:#4ade80" title="classic green"></button>
+    <button id="reset">reset shields</button>
+  </div>
+  <p class="hint">click anywhere to fire from below · rain falls from above · bullets pass through holes</p>
+
+  <script>
+    // ─── letter sprites ─────────────────────────────────────────────────────
+    // רעם = "thunder". Hebrew reads right-to-left, so on-screen order
+    // left→right must be: ם, ע, ר.
+    // 14 cols × 12 rows, ~3-cell stroke so erosion looks meaty.
+
+    const LETTERS = {
+      mem: [   // ם — final mem, closed box
+        'XXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXX',
+        'XXX........XXX',
+        'XXX........XXX',
+        'XXX........XXX',
+        'XXX........XXX',
+        'XXX........XXX',
+        'XXX........XXX',
+        'XXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXX',
+      ],
+      ayin: [  // ע
+        'XXX.........XX',
+        'XXX........XXX',
+        'XXX........XXX',
+        '.XXX.......XXX',
+        '.XXX......XXX.',
+        '..XXX.....XXX.',
+        '..XXX....XXX..',
+        '...XXX..XXX...',
+        '...XXXXXXX....',
+        '..XXXXXXX.....',
+        '.XXXX.........',
+        'XXXX..........',
+      ],
+      resh: [  // ר
+        'XXXXXXXXXXXX..',
+        'XXXXXXXXXXXXX.',
+        'XXXXXXXXXXXXXX',
+        '...........XXX',
+        '...........XXX',
+        '...........XXX',
+        '...........XXX',
+        '...........XXX',
+        '...........XXX',
+        '...........XXX',
+        '...........XXX',
+        '...........XXX',
+      ],
+    }
+
+    const SHIELD_ORDER = ['mem', 'ayin', 'resh']  // on-screen left → right
+    const CELLS_W = 14
+    const CELLS_H = 12
+
+    let PIXEL   = 5
+    let BLAST   = 2
+    let RAGGED  = 0.6
+    let GLOW    = 8
+    let COLOR   = '#fbbf24'
+    let RAINING = true
+
+    const canvas = document.getElementById('c')
+    const ctx    = canvas.getContext('2d')
+
+    // ─── shield state ───────────────────────────────────────────────────────
+    // Each shield: { x, y, cells: boolean[CELLS_H][CELLS_W] }
+    const shields = []
+
+    const GAP  = () => PIXEL * 10
+    const PAD  = () => PIXEL * 8
+
+    function layout() {
+      const shieldW = CELLS_W * PIXEL
+      canvas.width  = PAD() * 2 + shieldW * 3 + GAP() * 2
+      canvas.height = PIXEL * 60
+      const y = Math.round(canvas.height * 0.45)
+      shields.forEach((s, i) => {
+        s.x = PAD() + i * (shieldW + GAP())
+        s.y = y
+      })
+    }
+
+    function buildShields() {
+      shields.length = 0
+      for (const key of SHIELD_ORDER) {
+        const grid = LETTERS[key]
+        const cells = grid.map((row) => [...row].map((ch) => ch === 'X'))
+        shields.push({ x: 0, y: 0, cells })
+      }
+      layout()
+    }
+
+    // ─── erosion ────────────────────────────────────────────────────────────
+    function erode(shield, cr, cc) {
+      const R = BLAST
+      const lo = Math.floor(-R), hi = Math.ceil(R)
+      for (let dr = lo; dr <= hi; dr++) {
+        for (let dc = lo; dc <= hi; dc++) {
+          const r = cr + dr, c = cc + dc
+          if (r < 0 || r >= CELLS_H || c < 0 || c >= CELLS_W) continue
+          const d = Math.sqrt(dr * dr + dc * dc)
+          if (d > R) continue
+          const edge = d / R                       // 0 center → 1 rim
+          const pClean = 1                         // ragged 0 → clean circle
+          const pRagged = edge < 0.55 ? 1 : Math.max(0, 1 - (edge - 0.55) / 0.45)
+          const p = pClean + (pRagged - pClean) * RAGGED
+          if (Math.random() < p) shield.cells[r][c] = false
+        }
+      }
+    }
+
+    // bullet at canvas coords → hit test all shields. Returns true if it hit.
+    function hitShields(x, y) {
+      for (const s of shields) {
+        const cc = Math.floor((x - s.x) / PIXEL)
+        const cr = Math.floor((y - s.y) / PIXEL)
+        if (cc < 0 || cc >= CELLS_W || cr < 0 || cr >= CELLS_H) continue
+        if (s.cells[cr][cc]) {
+          erode(s, cr, cc)
+          burst(x, y, COLOR)
+          return true
+        }
+      }
+      return false
+    }
+
+    // ─── bullets ────────────────────────────────────────────────────────────
+    const bullets = []   // { x, y, vy }
+    let lastRain = 0
+
+    function stepBullet(b) {
+      // sub-step so fast bullets can't tunnel through a thin wall
+      const steps = Math.ceil(Math.abs(b.vy) / (PIXEL / 2))
+      const dy = b.vy / steps
+      for (let i = 0; i < steps; i++) {
+        b.y += dy
+        if (hitShields(b.x, b.y)) return false
+      }
+      return b.y > -20 && b.y < canvas.height + 20
+    }
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect()
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width)
+      bullets.push({ x, y: canvas.height - 4, vy: -6 })
+    })
+
+    // ─── particles (same recipe as the invader lab) ─────────────────────────
+    const particles = []
+
+    function burst(cx, cy, color) {
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.5
+        const speed = 1 + Math.random() * 2.5
+        particles.push({
+          x: cx, y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          decay: 0.03 + Math.random() * 0.03,
+          size: PIXEL * (0.4 + Math.random() * 0.6),
+          color,
+        })
+      }
+    }
+
+    // ─── controls ───────────────────────────────────────────────────────────
+    const bind = (id, fn) => {
+      const el = document.getElementById(id)
+      el.addEventListener('input', () => fn(el))
+      return el
+    }
+    bind('px',     (el) => { PIXEL = +el.value; document.getElementById('pxVal').textContent = el.value; layout() })
+    bind('blast',  (el) => { BLAST = +el.value; document.getElementById('blastVal').textContent = el.value })
+    bind('ragged', (el) => { RAGGED = +el.value / 100; document.getElementById('raggedVal').textContent = `${el.value}%` })
+    bind('glow',   (el) => { GLOW = +el.value; document.getElementById('glowVal').textContent = el.value })
+    document.getElementById('rain').addEventListener('change', (e) => { RAINING = e.target.checked })
+    document.getElementById('amber').addEventListener('click', () => { COLOR = '#fbbf24' })
+    document.getElementById('green').addEventListener('click', () => { COLOR = '#4ade80' })
+    document.getElementById('reset').addEventListener('click', buildShields)
+
+    // ─── draw ────────────────────────────────────────────────────────────────
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      ctx.fillStyle   = COLOR
+      ctx.shadowColor = COLOR
+      ctx.shadowBlur  = GLOW
+      for (const s of shields) {
+        for (let r = 0; r < CELLS_H; r++) {
+          for (let c = 0; c < CELLS_W; c++) {
+            if (s.cells[r][c]) ctx.fillRect(s.x + c * PIXEL, s.y + r * PIXEL, PIXEL, PIXEL)
+          }
+        }
+      }
+      ctx.shadowBlur = 0
+
+      // bullets
+      for (const b of bullets) {
+        ctx.fillStyle = b.vy > 0 ? '#ef4444' : '#a3e635'
+        ctx.fillRect(b.x - 1.5, b.y - 6, 3, 12)
+      }
+
+      // particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]
+        p.x += p.vx
+        p.y += p.vy
+        p.vy += 0.1
+        p.life -= p.decay
+        if (p.life <= 0) { particles.splice(i, 1); continue }
+        ctx.globalAlpha = p.life
+        ctx.fillStyle   = p.color
+        ctx.shadowColor = p.color
+        ctx.shadowBlur  = 6
+        ctx.fillRect(p.x, p.y, p.size, p.size)
+        ctx.shadowBlur  = 0
+        ctx.globalAlpha = 1
+      }
+    }
+
+    // ─── loop ────────────────────────────────────────────────────────────────
+    function loop(now) {
+      if (RAINING && now - lastRain > 380) {
+        bullets.push({ x: PAD() + Math.random() * (canvas.width - PAD() * 2), y: -10, vy: 4 })
+        lastRain = now
+      }
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        if (!stepBullet(bullets[i])) bullets.splice(i, 1)
+      }
+      draw()
+      requestAnimationFrame(loop)
+    }
+
+    buildShields()
+    requestAnimationFrame(loop)
+  </script>
+</body>
+</html>
